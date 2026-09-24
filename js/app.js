@@ -447,6 +447,15 @@ document.addEventListener('change', (e) => {
     toast(el.type === 'time' ? `已改为 ${v}${isConnected() ? '，定时任务会自动更新' : ''}` : '已保存');
     return;
   }
+  if (el.matches('[data-time]')) {
+    const key = el.dataset.time;
+    const [h, m] = String(state.data.settings[key] || '00:00').split(':');
+    const v = el.dataset.part === 'h' ? `${el.value}:${m}` : `${h}:${el.value}`;
+    if (!/^\d{2}:\d{2}$/.test(v)) return;
+    actions.updateSettings({ [key]: v });
+    toast(`已改为 ${v}${isConnected() ? '，定时任务会自动更新' : ''}`);
+    return;
+  }
   if (el.matches('[data-cfg]')) {
     state.cfg[el.dataset.cfg] = el.value.trim();
     saveCfg();

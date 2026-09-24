@@ -410,6 +410,18 @@ export function pushStatus() {
   return ['点此开启', '允许通知后，本机就会收到推送'];
 }
 
+// 提醒时间：用「时 / 分」两个下拉框，不用 <input type="time">——Safari 的时间框改完不一定触发 change，存不上
+const pad2 = (n) => String(n).padStart(2, '0');
+const timePart = (key, part, cur, values, label) => html`<span class="select"><span class="select-val">${cur}</span><select data-time="${key}" data-part="${part}" aria-label="${label}">${values.map(
+  (v) => html`<option value="${v}"${v === cur ? html` selected` : ''}>${v}</option>`,
+)}</select></span>`;
+const timeCtl = (key, value) => {
+  const [h = '00', m = '00'] = String(value || '').split(':');
+  const mins = Array.from({ length: 12 }, (_, i) => pad2(i * 5));
+  if (!mins.includes(m)) mins.push(m), mins.sort();
+  return html`<span class="time-ctl">${timePart(key, 'h', h, Array.from({ length: 24 }, (_, i) => pad2(i)), '时')}<span class="time-sep">:</span>${timePart(key, 'm', m, mins, '分')}</span>`;
+};
+
 const setToggle = (key, on) => html`<label class="switch"><input type="checkbox" data-set="${key}"${on ? html` checked` : ''}><span class="knob"></span></label>`;
 
 export function viewSettings() {
@@ -430,8 +442,8 @@ export function viewSettings() {
       navRow({ act: 'push-row', ic: 'bell', title: '本机通知', sub: pushSub, value: pushVal, cls: pushVal === '已开启' ? 'on' : '' }),
     ])}
     ${section('每天提醒', [
-      html`<div class="field"><span class="field-label">早间：今日待办</span><span class="field-ctl"><input type="time" data-set="morningAt" value="${s.morningAt}">${setToggle('morning', s.morning)}</span></div>`,
-      html`<div class="field"><span class="field-label">晚间：明日预告</span><span class="field-ctl"><input type="time" data-set="eveningAt" value="${s.eveningAt}">${setToggle('evening', s.evening)}</span></div>`,
+      html`<div class="field"><span class="field-label">早间：今日待办</span><span class="field-ctl">${timeCtl('morningAt', s.morningAt)}${setToggle('morning', s.morning)}</span></div>`,
+      html`<div class="field"><span class="field-label">晚间：明日预告</span><span class="field-ctl">${timeCtl('eveningAt', s.eveningAt)}${setToggle('evening', s.evening)}</span></div>`,
       navRow({ act: 'test-push', ic: 'bell', title: '发送测试通知' }),
       navRow({ act: 'devices', ic: 'phone', title: '已登记的设备', sub: '哪些设备会收到推送' }),
       html`<div class="field"><span class="field-label">同时建 GitHub Issue<small>装了 GitHub App 也会收到</small></span><span class="field-ctl">${setToggle('issue', s.issue)}</span></div>`,

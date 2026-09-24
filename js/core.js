@@ -2,7 +2,7 @@
 // 浏览器（应用本身）和 GitHub Action（定时提醒脚本）共用这一份代码，不依赖任何第三方库。
 // 所有日期都用 'YYYY-MM-DD' 字符串表示，按设置里的时区（默认 Asia/Shanghai）计算“今天”。
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.0.1';
 export const ENGINE_VERSION = '1';
 export const SCHEMA = 1;
 export const DATA_PATH = 'data/planner.json';

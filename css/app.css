@@ -1239,6 +1239,19 @@ b.now {
   appearance: none;
   min-height: 34px;
 }
+.time-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.time-ctl .select {
+  padding: 0 4px;
+}
+.time-sep {
+  color: var(--text-3);
+}
 .field-ctl input.short {
   width: 64px;
   flex: none;
