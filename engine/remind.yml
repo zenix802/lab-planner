@@ -1,0 +1,53 @@
+# 由「实验日程」应用自动写入和更新（在应用里改提醒时间会自动改这里的 cron），一般不需要手动修改。
+# 定时时间是 UTC：北京时间 = UTC + 8 小时。GitHub 的定时任务高峰期可能晚几分钟到几十分钟。
+name: 实验提醒
+
+on:
+  schedule:
+    - cron: '__MORNING_CRON__' # 早间：今日待办 + 逾期 + 提前准备
+    - cron: '__EVENING_CRON__' # 晚间：明日预告
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '提醒类型'
+        type: choice
+        options: [test, morning, evening, auto]
+        default: test
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: remind
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 读取数据
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+
+      - name: 发送提醒
+        working-directory: repo
+        env:
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'auto' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node --version && node scripts/remind.mjs
+
+      - name: 清理失效的推送订阅
+        if: always()
+        working-directory: repo
+        run: |
+          if [ -n "$(git status --porcelain -- push)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add push
+            git commit -m "清理失效的推送订阅"
+            git pull --rebase --autostash || true
+            git push
+          fi
