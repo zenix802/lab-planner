@@ -460,6 +460,8 @@ export function viewSettings() {
       navRow({ act: 'test-push', ic: 'bell', title: '发送测试通知' }),
       navRow({ act: 'devices', ic: 'phone', title: '已登记的设备', sub: '哪些设备会收到推送' }),
       html`<label class="field"><span class="field-label">邮件提醒<small>收不到推送时用，多个邮箱用逗号隔开</small></span><span class="field-ctl"><input type="email" multiple data-set="email" value="${s.email || ''}" placeholder="填写收件邮箱" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false"></span></label>`,
+      html`<label class="field"><span class="field-label">其他提醒<small>微信 / 群机器人，粘贴 Key 或机器人地址</small></span><span class="field-ctl"><input data-set="hooks" value="${s.hooks || ''}" placeholder="SCT… / sctp… / 机器人地址" autocapitalize="off" autocorrect="off" spellcheck="false"></span></label>`,
+      navRow({ act: 'hooks-guide', ic: 'bell', title: '怎么获取 Key / 机器人地址', sub: 'Server酱、PushPlus、企业微信、钉钉、飞书' }),
       html`<div class="field"><span class="field-label">同时建 GitHub Issue<small>装了 GitHub App 也会收到</small></span><span class="field-ctl">${setToggle('issue', s.issue)}</span></div>`,
     ])}
     <p class="foot-note">北京时间，由数据仓库里的 GitHub 定时任务发送；GitHub 高峰期可能晚几分钟到半小时。没有事项的时段不打扰。</p>

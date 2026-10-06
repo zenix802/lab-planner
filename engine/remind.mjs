@@ -1,6 +1,6 @@
 // 实验日程 · 定时提醒脚本
 // 由数据仓库里的 GitHub Actions 每天早晚各运行一次：读取 data/planner.json，
-// 算出今天/明天的待办，通过 Web Push 推送到已登记的设备，并可选地发一封提醒邮件（安卓手机在国内收不到网页推送时用）。
+// 算出今天/明天的待办，通过 Web Push 推送到已登记的设备，并可选地发邮件、微信（Server酱 / PushPlus）或企业微信 / 钉钉 / 飞书群消息（安卓手机在国内收不到网页推送时用）。
 // 这个文件由应用自动写入数据仓库的 scripts/ 目录，不需要手动修改。零依赖，只用 Node 自带模块。
 
 import { readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import crypto from 'node:crypto';
 import tls from 'node:tls';
-import { buildDigest, normalizeData, parseEmails, pickMode, todayIn, fmtMD, DATA_PATH } from './core.js';
+import { buildDigest, normalizeData, parseEmails, parseHooks, pickMode, todayIn, fmtMD, DATA_PATH } from './core.js';
 
 const ROOT = process.env.DATA_ROOT || process.cwd();
 const out = [];
@@ -195,6 +195,79 @@ async function emailBackup(s, digest, today) {
   }
 }
 
+// ───────────── 可选：其他提醒方式（Server酱 / PushPlus / 企业微信 / 钉钉 / 飞书群机器人）─────────────
+
+const maskKey = (h) => (h.value.startsWith('https://') ? `${new URL(h.value).hostname}/…` : `${h.value.slice(0, 6)}…`);
+
+async function postJson(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json;charset=utf-8' }, body: JSON.stringify(body), signal: AbortSignal.timeout(20000) });
+  const text = await r.text().catch(() => '');
+  let j = {};
+  try {
+    j = JSON.parse(text);
+  } catch {
+    /* 非 JSON 响应 */
+  }
+  return { status: r.status, j, text };
+}
+
+/** 按服务商格式发一条；返回 ''（成功）或失败原因 */
+export async function sendHook(h, title, text) {
+  // 钉钉机器人需要在安全设置里加关键词「实验日程」，所以正文里始终带上这四个字
+  const plain = `【实验日程】${title}\n${text}`;
+  let r;
+  let ok;
+  switch (h.kind) {
+    case 'sct':
+    case 'sc3': {
+      const url = h.kind === 'sct' ? `https://sctapi.ftqq.com/${h.value}.send` : `https://${h.uid}.push.ft07.com/send/${h.value}.send`;
+      r = await postJson(url, { title: `实验日程 · ${title}`, desp: text.split('\n').join('\n\n') });
+      ok = r.j.code === 0;
+      break;
+    }
+    case 'pushplus':
+      r = await postJson('https://www.pushplus.plus/send', { token: h.value, title: `实验日程 · ${title}`, content: text, template: 'txt' });
+      ok = r.j.code === 200;
+      break;
+    case 'wecom':
+    case 'dingtalk':
+      r = await postJson(h.value, { msgtype: 'text', text: { content: plain } });
+      ok = r.j.errcode === 0;
+      break;
+    case 'feishu':
+      r = await postJson(h.value, { msg_type: 'text', content: { text: plain } });
+      ok = r.j.code === 0 || r.j.StatusCode === 0;
+      break;
+    default:
+      return '格式无法识别';
+  }
+  return ok ? '' : `HTTP ${r.status} ${(r.j.message || r.j.msg || r.j.errmsg || r.text || '').toString().slice(0, 160)}`;
+}
+
+/** 返回成功/失败的条数；没填就是 0/0 */
+async function hookBackup(s, digest) {
+  const hooks = parseHooks(s.hooks);
+  let ok = 0;
+  let bad = 0;
+  for (const h of hooks) {
+    if (h.kind === 'bad') {
+      log(`其他提醒：有一项格式无法识别，跳过（${h.value.slice(0, 12)}…）。`);
+      bad++;
+      continue;
+    }
+    try {
+      const err = await sendHook(h, digest.title, mailText(digest).trim());
+      if (err) throw new Error(err);
+      ok++;
+      log(`✓ 已发到${h.name}（${maskKey(h)}）`);
+    } catch (e) {
+      bad++;
+      log(`! ${h.name}发送失败：${e.message}`);
+    }
+  }
+  return { ok, bad };
+}
+
 // ───────────── 可选：同时在 GitHub 上建一个待办 Issue（装了 GitHub App 会收到推送/邮件）─────────────
 
 async function issueBackup(digest, today) {
@@ -251,7 +324,7 @@ async function main() {
     const vapid = await readJson('push/vapid.json');
     const subs = (await readJson('push/subscriptions.json', [])) || [];
     if (!vapid || !subs.length) {
-      log(s.email ? '没有设备开启网页推送，只发邮件。' : '还没有设备开启推送：请在应用「设置 → 本机通知」里开启，或填写邮件提醒地址。');
+      log(s.email || s.hooks ? '没有设备开启网页推送，只走邮件 / 其他提醒。' : '还没有设备开启推送：请在应用「设置 → 本机通知」里开启，或填写邮件提醒 / 其他提醒。');
     } else {
       const payload = JSON.stringify({ title: digest.title, body: digest.body, badge: digest.badge, tag: digest.tag, url: digest.url, ts: now.getTime() });
       const keep = [];
@@ -281,6 +354,9 @@ async function main() {
     const mailed = await emailBackup(s, digest, today);
     if (mailed) sent++;
     else if (mailed === false) failed++;
+    const hooked = await hookBackup(s, digest);
+    sent += hooked.ok;
+    failed += hooked.bad;
     if (s.issue && mode !== 'test') await issueBackup(digest, today).catch((e) => log('GitHub Issue 提醒失败：' + e.message));
   }
 

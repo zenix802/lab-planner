@@ -1,5 +1,5 @@
 // 入口：路由、渲染、事件分发、Service Worker
-import { TYPES, addDays, buildIndex, dueItems, fmtMD, nextDue, relText, isDate, parseEmails } from './core.js';
+import { TYPES, addDays, buildIndex, dueItems, fmtMD, nextDue, relText, isDate, parseEmails, parseHooks } from './core.js';
 import { state, actions, subscribe, today, index, find, isConnected, syncNow, scheduleSync, saveCfg, registerDevice } from './store.js';
 import { ui, icon, morph, closeSheet, closeAllSheets, refreshSheet, topSheet, actionSheet, confirmDialog, toast, runToastAction, setPath, getPath, readInput } from './ui.js';
 import { viewToday, viewCalendar, viewBatches, viewBatch, viewSettings, ruleText, shiftMonth, pushStatus } from './views.js';
@@ -268,6 +268,7 @@ const A = {
   'sp-edit': (el) => F.openSpeciesForm(el.dataset.id),
   away: () => F.openAway(),
   'install-guide': () => F.openInstallGuide(),
+  'hooks-guide': () => F.openHooksGuide(),
   'export-json': () => F.exportJSON(),
   'export-csv': () => F.exportCSV(),
   'export-md': () => F.exportMD(),
@@ -446,6 +447,13 @@ document.addEventListener('change', (e) => {
     if (raw && list.length === 0) return toast('邮箱格式不对，请检查一下');
     actions.updateSettings({ email: list.join(', ') });
     toast(list.length ? `已保存：每天早晚也会发邮件到 ${list.join('、')}` : '已关闭邮件提醒', { ms: 4000 });
+    return;
+  }
+  if (el.matches('[data-set="hooks"]')) {
+    const list = parseHooks(el.value);
+    if (list.some((h) => h.kind === 'bad')) return toast('有一项认不出来：请粘贴完整的 Key 或机器人地址（点下方「怎么获取」查看格式）', { ms: 6000 });
+    actions.updateSettings({ hooks: list.map((h) => h.value).join(' ') });
+    toast(list.length ? `已保存：每天早晚也会发到 ${list.map((h) => h.name).join('、')}。可以点「发送测试通知 → 完整测试」试一下` : '已关闭其他提醒', { ms: 5000 });
     return;
   }
   if (el.matches('[data-set]')) {

@@ -2,8 +2,8 @@
 // 浏览器（应用本身）和 GitHub Action（定时提醒脚本）共用这一份代码，不依赖任何第三方库。
 // 所有日期都用 'YYYY-MM-DD' 字符串表示，按设置里的时区（默认 Asia/Shanghai）计算“今天”。
 
-export const APP_VERSION = '1.1.0';
-export const ENGINE_VERSION = '2';
+export const APP_VERSION = '1.2.0';
+export const ENGINE_VERSION = '3';
 export const SCHEMA = 1;
 export const DATA_PATH = 'data/planner.json';
 export const COLLECTIONS = ['species', 'batches', 'tasks', 'logs', 'away'];
@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS = {
   eveningAt: '20:45',
   issue: false,
   email: '', // 邮件提醒收件地址（多个用逗号隔开）；发件邮箱配置在数据仓库的 Secrets 里
+  hooks: '', // 其他提醒方式：Server酱 / PushPlus 的 Key，或企业微信 / 钉钉 / 飞书群机器人地址（多个用空格隔开）
   updatedAt: 0,
 };
 
@@ -44,6 +45,37 @@ export const parseEmails = (v) =>
     .split(/[\s,，;；]+/)
     .map((x) => x.trim())
     .filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+
+/**
+ * 其他提醒方式：粘贴 Key 或群机器人地址，自动识别是哪一家（应用和提醒脚本共用）。
+ * 只认下面这几家的格式，认不出的标为 bad，提醒内容不会发到其他地方。
+ */
+export const HOOK_NAMES = { sc3: 'Server酱³', sct: 'Server酱', pushplus: 'PushPlus', wecom: '企业微信群', dingtalk: '钉钉群', feishu: '飞书群' };
+export function parseHooks(v) {
+  const out = [];
+  for (const raw of String(v || '').split(/[\s,，;；]+/)) {
+    const x = raw.trim();
+    if (!x) continue;
+    let m;
+    let kind = 'bad';
+    if ((m = /^sctp(\d+)t[A-Za-z0-9]+$/.exec(x))) kind = 'sc3';
+    else if (/^SCT[A-Za-z0-9]+$/.test(x)) kind = 'sct';
+    else if (/^[a-f0-9]{32}$/i.test(x)) kind = 'pushplus';
+    else if (/^https:\/\//i.test(x)) {
+      try {
+        const u = new URL(x);
+        const q = (k) => !!u.searchParams.get(k);
+        if (u.hostname === 'qyapi.weixin.qq.com' && u.pathname === '/cgi-bin/webhook/send' && q('key')) kind = 'wecom';
+        else if (u.hostname === 'oapi.dingtalk.com' && u.pathname === '/robot/send' && q('access_token')) kind = 'dingtalk';
+        else if (/^open\.(feishu\.cn|larksuite\.com)$/.test(u.hostname) && /^\/open-apis\/bot\/v2\/hook\/[\w-]+$/.test(u.pathname)) kind = 'feishu';
+      } catch {
+        /* 不是合法地址 */
+      }
+    }
+    out.push({ kind, name: HOOK_NAMES[kind] || '无法识别', value: x, uid: m ? m[1] : '' });
+  }
+  return out;
+}
 
 /** 新建批次时按类型预填的任务（全部可在表单里改）。 */
 export function templateTasks(type, species) {

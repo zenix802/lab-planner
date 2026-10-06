@@ -590,7 +590,7 @@ export function openTestPush(swReg) {
       <div class="sheet-body">
         <div class="list">
           ${navRow({ act: 'tp-local', ic: 'phone', title: '本机测试（立刻）', sub: '确认这台设备能弹出通知', chevron: false })}
-          ${navRow({ act: 'tp-remote', ic: 'cloud', title: '完整测试（经 GitHub，约 1 分钟）', sub: '真正走一遍：GitHub 定时任务 → 所有已登记设备，以及填写的提醒邮箱', chevron: false })}
+          ${navRow({ act: 'tp-remote', ic: 'cloud', title: '完整测试（经 GitHub，约 1 分钟）', sub: '真正走一遍：GitHub 定时任务 → 已登记设备、提醒邮箱和其他提醒', chevron: false })}
         </div>
         ${st.status ? html`<p class="foot-note strong">${st.status}</p>` : ''}
         ${st.runs && st.runs.length ? html`<div class="sec-title"><span>最近的提醒任务</span></div><div class="list">${st.runs.map((r) => html`<a class="row nav" href="${r.html_url}" target="_blank" rel="noopener"><span class="grow"><span class="t1">${runLabel(r)}</span><span class="t2">${new Date(r.created_at).toLocaleString('zh-CN', { hour12: false })} · ${r.event === 'schedule' ? '定时' : '手动'}</span></span>${icon('external', 'chev')}</a>`)}</div>` : ''}
@@ -641,7 +641,7 @@ export async function testRemoteRun() {
       await loadRuns(sheet);
       const r = st.runs && st.runs[0];
       if (r && r.status === 'completed' && Date.now() - new Date(r.created_at).getTime() < 5 * 60000) {
-        st.status = r.conclusion === 'success' ? '✓ 任务运行成功，通知应该已经到了。' : '✗ 任务失败了：点下面的记录查看原因（常见：还没有设备开启推送，或仓库还没配置发件邮箱）。';
+        st.status = r.conclusion === 'success' ? '✓ 任务运行成功，通知应该已经到了。' : '✗ 任务失败了：点下面的记录查看原因（常见：还没有设备开启推送、仓库还没配置发件邮箱，或 Key 填错了）。';
         return refreshSheet(sheet);
       }
     }
@@ -683,6 +683,40 @@ export async function devRemove(id) {
   refreshSheet(sheet);
 }
 
+export function openHooksGuide() {
+  openSheet({
+    kind: 'form',
+    render: () => html`${sheetHead('其他提醒方式', { left: '完成' })}
+    <div class="sheet-body guide">
+      <p>任选一种，把拿到的 Key 或机器人地址粘贴到「设置 → 每天提醒 → 其他提醒」。可以填多个，用空格隔开。填好后点「发送测试通知 → 完整测试」，约 1 分钟后应收到「测试通知」。</p>
+      <h3>${icon('phone')} Server酱³ App（安卓推荐）</h3>
+      <ol>
+        <li>打开 <a class="inline-link" href="https://sc3.ft07.com/" target="_blank" rel="noopener">sc3.ft07.com ${icon('external')}</a>，用微信扫码登录，按页面提示下载安装 Server酱 App。</li>
+        <li>在 SendKey 页面复制以 <code>sctp</code> 开头的 SendKey。</li>
+      </ol>
+      <p class="foot-note">走手机厂商自己的推送通道，华为、小米、OPPO、vivo 上不用后台常驻也能收到。</p>
+      <h3>${icon('bell')} 微信：Server酱 Turbo</h3>
+      <ol>
+        <li>打开 <a class="inline-link" href="https://sct.ftqq.com/" target="_blank" rel="noopener">sct.ftqq.com ${icon('external')}</a>，微信扫码登录，关注公众号。</li>
+        <li>在 SendKey 页面复制以 <code>SCT</code> 开头的 SendKey。</li>
+      </ol>
+      <p class="foot-note">免费额度有每日条数限制（以官网为准），每天两条提醒一般够用。</p>
+      <h3>${icon('bell')} 微信：PushPlus</h3>
+      <ol>
+        <li>打开 <a class="inline-link" href="https://www.pushplus.plus/" target="_blank" rel="noopener">pushplus.plus ${icon('external')}</a>，微信扫码登录，并<b>完成实名认证</b>（不认证无法发送）。</li>
+        <li>复制「一对一推送」里的 32 位 token。</li>
+      </ol>
+      <h3>${icon('cloud')} 企业微信 / 钉钉 / 飞书群机器人</h3>
+      <ol>
+        <li>建一个群（可以只有自己），在群设置里添加 <b>自定义机器人</b>（企业微信叫「群机器人」）。</li>
+        <li>复制 Webhook 地址（以 <code>https://</code> 开头）。</li>
+        <li><b>钉钉</b>：安全设置选「自定义关键词」，填 <code>实验日程</code>。</li>
+      </ol>
+      <p class="foot-note">提醒内容（任务名、批次名）会经过所选服务商的服务器。Key 和机器人地址存在你的私有数据仓库里，别人拿到也能往你那里发消息，请不要外传。</p>
+    </div>`,
+  });
+}
+
 export function openInstallGuide() {
   openSheet({
     kind: 'form',
@@ -693,7 +727,7 @@ export function openInstallGuide() {
         <li>用 <b>Chrome</b> 或 <b>Edge</b> 浏览器打开本页面。在微信 / QQ 里收到的链接，先点右上角「···」→「在浏览器打开」。</li>
         <li>点右上角 <b>⋮</b> → <b>添加到主屏幕</b>（或「安装应用」），之后从桌面图标打开。</li>
         <li>进「设置 → GitHub 同步」粘贴 Token。</li>
-        <li><b>在「设置 → 每天提醒」里填写邮件提醒地址</b>。也可以试试开启「本机通知」，但国内网络下多半收不到。</li>
+        <li><b>在「设置 → 每天提醒」里填写邮件提醒，或「其他提醒」（微信 / Server酱 App / 群机器人）</b>。也可以试试开启「本机通知」，但国内网络下多半收不到。</li>
       </ol>
       <p class="foot-note">华为、小米、OPPO、vivo 等手机自带的浏览器，以及夸克、UC，对网页应用支持不完整，建议用 Chrome 或 Edge。</p>`;
       const windows = html`<h3>${icon('calendar')} Windows 电脑</h3>
