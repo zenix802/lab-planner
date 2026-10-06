@@ -473,6 +473,7 @@ export function viewSettings() {
       navRow({ act: 'export-md', ic: 'note', title: '导出记录（Markdown）', sub: '按日期整理，适合贴进 Obsidian / 实验记录' }),
       navRow({ act: 'export-csv', ic: 'download', title: '导出记录（CSV）', sub: 'Excel / Numbers 打开' }),
       navRow({ act: 'export-json', ic: 'download', title: '导出完整备份（JSON）' }),
+      navRow({ act: 'bulk-import', ic: 'upload', title: '批量导入批次（Excel / CSV）', sub: '按模板一次建好多个批次和任务' }),
       navRow({ act: 'import', ic: 'upload', title: '从备份导入', sub: '与现有数据合并，不会覆盖' }),
     ])}
     ${section('本机', [

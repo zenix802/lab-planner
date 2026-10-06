@@ -27,6 +27,7 @@ function go(path, sel) {
   else render();
 }
 window.addEventListener('hashchange', () => {
+  if (location.hash === '#/import') return openImportLink();
   const prev = ui.route;
   ui.route = parseHash();
   closeAllSheets();
@@ -273,6 +274,8 @@ const A = {
   'export-csv': () => F.exportCSV(),
   'export-md': () => F.exportMD(),
   import: () => document.getElementById('import-file').click(),
+  'bulk-import': () => F.openBulkImport(),
+  'bulk-apply': () => F.bulkApply(go),
 
   // 弹层通用
   'sheet-close': () => closeSheet(),
@@ -441,6 +444,7 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.id === 'import-file') return F.importFile(el);
+  if (el.id === 'bulk-file') return F.bulkFile(el);
   if (el.matches('[data-set="email"]')) {
     const raw = el.value.trim();
     const list = parseEmails(raw);
@@ -536,6 +540,16 @@ async function initSW() {
 
 // ───────────── 启动 ─────────────
 
+// 批量导入链接：#/import 直接打开导入页
+function openImportLink() {
+  history.replaceState(null, '', '#/settings');
+  ui.route = parseHash();
+  closeAllSheets();
+  render();
+  F.openBulkImport();
+}
+const importLink = location.hash === '#/import';
+if (importLink) history.replaceState(null, '', '#/settings');
 // 邀请链接：#/connect?owner=…&repo=…，只预填用户名和仓库；Token 永远不放进链接
 const invite = /^#\/connect\?(.*)$/.exec(location.hash);
 if (invite) history.replaceState(null, '', '#/settings');
@@ -550,6 +564,7 @@ if (invite) {
   if (isConnected()) toast(`这台设备已经连接了 ${state.cfg.owner}/${state.cfg.repo}`, { ms: 5000 });
   else F.openGithub({ owner: clean(q.get('owner')), repo: clean(q.get('repo')) });
 }
+if (importLink) F.openBulkImport();
 
 let lastDay = today();
 setInterval(() => {

@@ -11,6 +11,7 @@ import {
 import { ui, icon, TYPE_ICON, openSheet, closeSheet, refreshSheet, topSheet, sheetHead, field, stepper, seg, toggle, navRow, toast, confirmDialog, fmtTime, selectCtl } from './ui.js';
 import { pushEnv, subscribePush } from './push.js';
 import { ruleText, T } from './views.js';
+import { readTable, planImport, TEMPLATE_XLSX, TEMPLATE_CSV } from './bulk.js';
 
 const activeSpecies = () => state.data.species.filter((s) => !s.deleted).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
 const clampInt = (v, min, max = 9999) => Math.min(max, Math.max(min, Math.round(+v) || 0));
@@ -836,6 +837,76 @@ export async function exportMD() {
   }
   deliverFile(`实验记录-${stampName()}.md`, md, 'text/markdown');
 }
+// ═════════════ 批量导入（Excel / CSV）═════════════
+
+export function openBulkImport() {
+  openSheet({ kind: 'form', state: { plan: null, fileName: '', err: '', busy: false }, render: renderBulk });
+}
+function renderBulk(st) {
+  const p = st.plan;
+  const n = p ? p.items.length : 0;
+  const tasks = p ? p.items.reduce((s, it) => s + it.tasks.length, 0) : 0;
+  return html`${sheetHead('批量导入批次', { left: p ? '取消' : '完成' })}
+  <div class="sheet-body">
+    <ol class="steps">
+      <li><b>下载模板</b>，每行一个任务；同一个「批次名称」的多行会合并成一个批次。不填任务的批次，按类型自动生成默认任务（和在应用里新建一样）。
+        <a class="inline-link" href="${TEMPLATE_XLSX}" download="实验日程-批量导入模板.xlsx">Excel 模板 ${icon('download')}</a>
+        <a class="inline-link" href="${TEMPLATE_CSV}" download="实验日程-批量导入模板.csv">CSV 模板 ${icon('download')}</a></li>
+      <li><b>填好后选择文件</b>：支持 .xlsx 和 .csv。模板里的「示例」「说明」两页不会被导入。</li>
+    </ol>
+    <label class="btn block ${p ? 'ghost' : ''}">${icon('upload')}${st.fileName ? `重新选择（当前：${st.fileName}）` : '选择文件'}
+      <input type="file" id="bulk-file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>
+    ${st.err ? html`<p class="foot-note error">${st.err}</p>` : ''}
+    ${p && p.errors.length ? html`<div class="sec-title"><span>需要修改（${p.errors.length}）</span></div><div class="list">${p.errors.map((e) => html`<div class="row err"><span class="grow">${e}</span></div>`)}</div>` : ''}
+    ${p && p.warnings.length ? html`<div class="sec-title"><span>提示（${p.warnings.length}）</span></div><div class="list">${p.warnings.map((e) => html`<div class="row"><span class="grow note-wrap">${e}</span></div>`)}</div>` : ''}
+    ${n ? html`<div class="sec-title"><span>将新建 ${n} 个批次、${tasks} 个任务</span></div>
+      <div class="list">${p.items.map((it) => html`<div class="row"><span class="grow"><span class="t1">${it.batch.name}</span>
+        <span class="t2">${T(it.batch.type).label}${it.speciesName ? ` · ${it.speciesName}` : ''} · ${it.batch.planned ? '计划' : ''}${fmtMD(it.batch.start)}${it.batch.planned ? '开始' : ''} · ${it.tasks.length ? it.tasks.map((t) => t.name).join('、') : '无任务'}${it.auto ? '（自动生成）' : ''}</span></span></div>`)}</div>
+      <button type="button" class="btn block" data-act="bulk-apply"${attr('disabled', st.busy)}>${p.errors.length ? `先导入这 ${n} 个批次（有错的行修改后再导入一次）` : `导入 ${n} 个批次`}</button>
+      <p class="foot-note">同名的批次会被跳过，所以改完出错的行，可以把整个文件再导入一次，不会重复。</p>` : ''}
+  </div>`;
+}
+export async function bulkFile(input) {
+  const f = input.files && input.files[0];
+  input.value = '';
+  const sheet = topSheet();
+  if (!f || !sheet) return;
+  const st = sheet.state;
+  st.fileName = f.name;
+  st.err = '';
+  st.plan = null;
+  try {
+    const rows = await readTable(f);
+    st.plan = planImport(rows, { today: today(), species: state.data.species, batches: state.data.batches });
+  } catch (e) {
+    st.err = e.message || String(e);
+  }
+  refreshSheet(sheet);
+}
+export function bulkApply(go) {
+  const sheet = topSheet();
+  const st = sheet && sheet.state;
+  if (!st || !st.plan || st.busy) return;
+  st.busy = true;
+  const made = {};
+  for (const it of st.plan.items) {
+    let speciesId = it.batch.speciesId;
+    if (it.newSpecies) {
+      const key = it.speciesName.toLowerCase();
+      if (!made[key]) {
+        actions.saveSpecies({ name: it.speciesName, latin: '', water: 3, feed: 7 });
+        made[key] = (state.data.species.find((s) => !s.deleted && s.name.toLowerCase() === key) || {}).id;
+      }
+      speciesId = made[key];
+    }
+    actions.createBatch({ ...it.batch, speciesId }, it.tasks);
+  }
+  const n = st.plan.items.length;
+  closeSheet(sheet);
+  go('batches');
+  toast(`已导入 ${n} 个批次 ✓${isConnected() ? '，正在同步到 GitHub' : ''}`, { ms: 5000 });
+}
+
 export async function importFile(input) {
   const f = input.files && input.files[0];
   input.value = '';

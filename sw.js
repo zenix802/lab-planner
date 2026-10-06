@@ -1,6 +1,6 @@
 // 实验日程 · Service Worker：离线缓存 + 接收推送
 // 发布新版本时把 VERSION 改一下，用户下次打开会提示“有新版本”。
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const CACHE = 'lab-planner-' + VERSION;
 const ASSETS = [
   './',
@@ -16,6 +16,7 @@ const ASSETS = [
   'js/push.js',
   'js/views.js',
   'js/forms.js',
+  'js/bulk.js',
   'engine/remind.mjs',
   'engine/remind.yml',
   'icons/icon-192.png',

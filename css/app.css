@@ -1640,3 +1640,10 @@ body.has-sheet #toast.show {
 .card .btn.ghost {
   background: var(--accent-soft);
 }
+
+/* 批量导入：提示可换行 */
+.note-wrap {
+  font-size: 14px;
+  color: var(--text-2);
+  white-space: normal;
+}

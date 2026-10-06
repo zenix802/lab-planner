@@ -118,6 +118,17 @@
 
 ---
 
+## 批量导入批次（Excel / CSV）
+
+- 直达链接：`https://zenix802.github.io/lab-planner/#/import`（或「设置 → 数据 → 批量导入批次」）
+- 模板：[Excel](templates/lab-planner-import-template.xlsx)（带下拉选项、示例页和填写说明）· [CSV](templates/lab-planner-import-template.csv)
+- 一行一个任务，同一「批次名称」的多行合并成一个批次；某个批次不写任务，就按类型自动生成默认任务
+- 必填：批次名称、类型（实生苗 / 愈伤扩繁 / 组培苗扩繁 / 组培苗生根 / 其他）、开始日期
+- 导入前先预览，出错的行会标出行号；已存在的同名批次自动跳过，可以放心重复导入
+- CSV 支持 UTF-8 和 Excel 默认的 GBK 编码
+
+> iPhone/iPad 上「主屏幕里的应用」和 Safari 的数据是分开的：请在主屏幕应用里点「设置 → 数据 → 批量导入批次」，不要在 Safari 里打开链接导入。
+
 ## 给其他人用（每人一个私有仓库，数据互相隔离）
 
 对方不需要 GitHub 账号。由你在自己的账号下为每人建一个私有数据仓库，再生成一个**只授权那一个仓库**的 Token：
@@ -172,6 +183,7 @@
 | `js/core.js` | 排程核心（下次日期、代数、合并、提醒内容）——应用和提醒脚本共用 |
 | `js/app.js` `views.js` `forms.js` `ui.js` `html.js` | 界面 |
 | `js/store.js` `github.js` `push.js` | 本地存储、GitHub 同步、推送订阅 |
+| `js/bulk.js`、`templates/` | 批量导入（Excel / CSV 解析）和导入模板 |
 | `sw.js` | 离线缓存、接收推送、显示通知 |
 | `engine/remind.mjs`、`engine/remind.yml` | 提醒脚本和定时任务模板（连接时自动写入数据仓库） |
 
