@@ -2,8 +2,8 @@
 // 浏览器（应用本身）和 GitHub Action（定时提醒脚本）共用这一份代码，不依赖任何第三方库。
 // 所有日期都用 'YYYY-MM-DD' 字符串表示，按设置里的时区（默认 Asia/Shanghai）计算“今天”。
 
-export const APP_VERSION = '1.0.1';
-export const ENGINE_VERSION = '1';
+export const APP_VERSION = '1.1.0';
+export const ENGINE_VERSION = '2';
 export const SCHEMA = 1;
 export const DATA_PATH = 'data/planner.json';
 export const COLLECTIONS = ['species', 'batches', 'tasks', 'logs', 'away'];
@@ -34,8 +34,16 @@ export const DEFAULT_SETTINGS = {
   evening: true,
   eveningAt: '20:45',
   issue: false,
+  email: '', // 邮件提醒收件地址（多个用逗号隔开）；发件邮箱配置在数据仓库的 Secrets 里
   updatedAt: 0,
 };
+
+/** 邮件提醒收件地址：逗号/分号/空格分隔，过滤掉格式不对的（应用和提醒脚本共用） */
+export const parseEmails = (v) =>
+  String(v || '')
+    .split(/[\s,，;；]+/)
+    .map((x) => x.trim())
+    .filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
 
 /** 新建批次时按类型预填的任务（全部可在表单里改）。 */
 export function templateTasks(type, species) {

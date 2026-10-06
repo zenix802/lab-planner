@@ -1,13 +1,14 @@
 // 实验日程 · 定时提醒脚本
 // 由数据仓库里的 GitHub Actions 每天早晚各运行一次：读取 data/planner.json，
-// 算出今天/明天的待办，通过 Web Push 推送到已登记的 iPhone / iPad / Mac。
+// 算出今天/明天的待办，通过 Web Push 推送到已登记的设备，并可选地发一封提醒邮件（安卓手机在国内收不到网页推送时用）。
 // 这个文件由应用自动写入数据仓库的 scripts/ 目录，不需要手动修改。零依赖，只用 Node 自带模块。
 
 import { readFile, writeFile, appendFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import crypto from 'node:crypto';
-import { buildDigest, normalizeData, pickMode, todayIn, fmtMD, DATA_PATH } from './core.js';
+import tls from 'node:tls';
+import { buildDigest, normalizeData, parseEmails, pickMode, todayIn, fmtMD, DATA_PATH } from './core.js';
 
 const ROOT = process.env.DATA_ROOT || process.cwd();
 const out = [];
@@ -73,6 +74,127 @@ export async function sendPush(sub, payload, vapid) {
   return { status: res.status, text: await res.text().catch(() => '') };
 }
 
+// ───────────── 可选：邮件提醒（SMTP over SSL，默认 465 端口）─────────────
+// 发件邮箱放在仓库 Secrets：SMTP_HOST（如 smtp.163.com）、SMTP_USER（完整邮箱地址）、SMTP_PASS（授权码，不是登录密码）、SMTP_PORT（可省略）
+
+const b64 = (s) => Buffer.from(String(s), 'utf8').toString('base64');
+const encWord = (s) => `=?UTF-8?B?${b64(s)}?=`;
+const maskMail = (a) => a.replace(/^(.)[^@]*(@.*)$/, '$1***$2');
+
+function mailCfg() {
+  const host = (process.env.SMTP_HOST || '').trim();
+  const user = (process.env.SMTP_USER || '').trim();
+  const pass = process.env.SMTP_PASS || '';
+  if (!host || !user || !pass) return null;
+  return { host, port: parseInt(process.env.SMTP_PORT, 10) || 465, user, pass };
+}
+
+export function buildMail({ from, to, subject, text, date = new Date() }) {
+  return [
+    `From: ${encWord('实验日程')} <${from}>`,
+    `To: ${to.join(', ')}`,
+    `Subject: ${encWord(subject)}`,
+    `Date: ${date.toUTCString().replace('GMT', '+0000')}`,
+    `Message-ID: <${crypto.randomUUID()}@lab-planner>`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    b64(text).replace(/.{1,76}/g, '$&\r\n'),
+  ].join('\r\n');
+}
+
+/** 极简 SMTP 客户端：EHLO → AUTH LOGIN → MAIL/RCPT → DATA。正文是 base64，不需要转义行首的点 */
+export async function sendMail(cfg, rcpts, data) {
+  const sock = tls.connect({ host: cfg.host, port: cfg.port, servername: cfg.host });
+  sock.setEncoding('utf8');
+  sock.setTimeout(30000, () => sock.destroy(new Error('SMTP 连接超时')));
+  const lines = [];
+  let partial = '';
+  let error = null;
+  let wake = null;
+  const poke = () => wake && wake();
+  sock.on('data', (d) => {
+    partial += d;
+    let i;
+    while ((i = partial.indexOf('\n')) >= 0) {
+      lines.push(partial.slice(0, i).replace(/\r$/, ''));
+      partial = partial.slice(i + 1);
+    }
+    poke();
+  });
+  sock.on('error', (e) => {
+    error = e;
+    poke();
+  });
+  sock.on('close', () => {
+    error = error || new Error('SMTP 连接被服务器关闭');
+    poke();
+  });
+  const reply = async () => {
+    const got = [];
+    for (;;) {
+      while (lines.length) {
+        const l = lines.shift();
+        got.push(l);
+        if (/^\d{3}(?: |$)/.test(l)) return { code: parseInt(l, 10), text: got.join(' / ') };
+      }
+      if (error) throw error;
+      await new Promise((r) => (wake = r));
+      wake = null;
+    }
+  };
+  // label 用于报错，绝不把命令本身（可能含授权码）写进日志
+  const step = async (label, line, ok) => {
+    if (line != null) sock.write(line + '\r\n');
+    const r = await reply();
+    if (!ok.includes(r.code)) throw new Error(`${label}：${r.text}`);
+    return r;
+  };
+  try {
+    await step('连接', null, [220]);
+    await step('EHLO', 'EHLO lab-planner', [250]);
+    await step('登录', 'AUTH LOGIN', [334]);
+    await step('登录（邮箱）', b64(cfg.user), [334]);
+    await step('登录（授权码）', b64(cfg.pass), [235]);
+    await step('发件人', `MAIL FROM:<${cfg.user}>`, [250]);
+    for (const to of rcpts) await step(`收件人 ${maskMail(to)}`, `RCPT TO:<${to}>`, [250, 251]);
+    await step('DATA', 'DATA', [354]);
+    await step('发送正文', data + '\r\n.', [250]);
+    sock.write('QUIT\r\n');
+  } finally {
+    sock.end();
+  }
+}
+
+function mailText(digest) {
+  const app = (process.env.APP_URL || '').startsWith('http') ? process.env.APP_URL : '';
+  return `${digest.body}\n\n——\n由「实验日程」自动发送，完成后在应用里打勾即可。${app ? `\n打开应用：${app}` : ''}\n`;
+}
+
+async function emailBackup(s, digest, today) {
+  if (!String(s.email || '').trim()) return null;
+  const to = parseEmails(s.email);
+  if (!to.length) {
+    log('邮件提醒：收件地址格式不对，跳过。');
+    return false;
+  }
+  const cfg = mailCfg();
+  if (!cfg) {
+    log('邮件提醒：仓库还没配置发件邮箱（Settings → Secrets and variables → Actions：SMTP_HOST / SMTP_USER / SMTP_PASS），跳过。');
+    return false;
+  }
+  try {
+    const subject = `【实验日程】${fmtMD(today)} ${digest.title}`;
+    await sendMail(cfg, to, buildMail({ from: cfg.user, to, subject, text: mailText(digest) }));
+    log(`✓ 已发邮件到 ${to.map(maskMail).join('、')}`);
+    return true;
+  } catch (e) {
+    log(`! 邮件发送失败：${e.message}`);
+    return false;
+  }
+}
+
 // ───────────── 可选：同时在 GitHub 上建一个待办 Issue（装了 GitHub App 会收到推送/邮件）─────────────
 
 async function issueBackup(digest, today) {
@@ -129,7 +251,7 @@ async function main() {
     const vapid = await readJson('push/vapid.json');
     const subs = (await readJson('push/subscriptions.json', [])) || [];
     if (!vapid || !subs.length) {
-      log('还没有设备开启推送：请在应用「设置 → 提醒」里点“开启本机提醒”。');
+      log(s.email ? '没有设备开启网页推送，只发邮件。' : '还没有设备开启推送：请在应用「设置 → 本机通知」里开启，或填写邮件提醒地址。');
     } else {
       const payload = JSON.stringify({ title: digest.title, body: digest.body, badge: digest.badge, tag: digest.tag, url: digest.url, ts: now.getTime() });
       const keep = [];
@@ -156,6 +278,9 @@ async function main() {
       }
       if (keep.length !== subs.length) await writeFile(join(ROOT, 'push/subscriptions.json'), JSON.stringify(keep, null, 2) + '\n');
     }
+    const mailed = await emailBackup(s, digest, today);
+    if (mailed) sent++;
+    else if (mailed === false) failed++;
     if (s.issue && mode !== 'test') await issueBackup(digest, today).catch((e) => log('GitHub Issue 提醒失败：' + e.message));
   }
 

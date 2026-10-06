@@ -118,6 +118,37 @@
 
 ---
 
+## 给其他人用（每人一个私有仓库，数据互相隔离）
+
+对方不需要 GitHub 账号。由你在自己的账号下为每人建一个私有数据仓库，再生成一个**只授权那一个仓库**的 Token：
+
+1. 新建私有仓库（如 `QXR`），勾选 **Add a README file**。
+2. 生成 Fine-grained Token：**Only select repositories** 只选这个仓库，Contents / Workflows / Actions 设为 Read and write。
+3. 发给对方一个**邀请链接**（只预填用户名和仓库，不含 Token）：
+   `https://zenix802.github.io/lab-planner/#/connect?owner=zenix802&repo=QXR`
+   Token **单独私信发送**。对方打开链接，粘贴 Token，点「连接并初始化」即可。
+4. 收回权限：删掉对方的 Token 即可，数据仍在你的仓库里。
+
+## 安卓 / Windows 与邮件提醒
+
+| 设备 | 推荐浏览器 | 网页推送（国内网络） |
+|---|---|---|
+| iPhone / iPad | Safari（添加到主屏幕） | ✅ 走 Apple 推送 |
+| Mac | Safari（添加到程序坞） | ✅ |
+| Windows | **Edge**（安装为应用） | ✅ 走微软推送；Chrome 依赖 Google，收不到 |
+| 安卓 | Chrome / Edge（添加到主屏幕） | ⚠️ 依赖 Google 服务，国内多半收不到 → **用邮件提醒** |
+
+**邮件提醒**：在应用「设置 → 每天提醒 → 邮件提醒」填写收件邮箱，每次提醒（含「完整测试」）都会同时发一封邮件。发件邮箱需要在**每个数据仓库**里配置一次（Settings → Secrets and variables → Actions → New repository secret）：
+
+| Secret | 例子 |
+|---|---|
+| `SMTP_HOST` | `smtp.163.com`（QQ 邮箱为 `smtp.qq.com`） |
+| `SMTP_USER` | 完整的发件邮箱地址 |
+| `SMTP_PASS` | 邮箱的 **SMTP 授权码**（在邮箱网页版设置里开启 SMTP 后生成，不是登录密码） |
+| `SMTP_PORT` | 可不填，默认 465（SSL） |
+
+> 拿到数据仓库 Token 的人可以改仓库里的提醒脚本，理论上能读出这个授权码。所以请**专门注册一个发件邮箱**，不要用你的主邮箱。
+
 ## 更新应用
 
 替换公开仓库里改动过的文件，并把 `sw.js` 第一行附近的 `VERSION` 改成新的版本号（如 `1.0.1`）。下次打开应用会提示“有新版本 · 更新”。提醒脚本如有变化，应用会自动同步到数据仓库。

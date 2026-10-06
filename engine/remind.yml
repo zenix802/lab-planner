@@ -37,6 +37,12 @@ jobs:
         env:
           MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'auto' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_URL: '__APP_URL__'
+          # 邮件提醒的发件邮箱（可选）：在仓库 Settings → Secrets and variables → Actions 里添加
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
         run: node --version && node scripts/remind.mjs
 
       - name: 清理失效的推送订阅

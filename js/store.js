@@ -368,7 +368,7 @@ export async function ensureEngine(force = false) {
   }
   const [core, remind, yml] = await Promise.all([fetchText('js/core.js'), fetchText('engine/remind.mjs'), fetchText('engine/remind.yml')]);
   const s = { ...DEFAULT_SETTINGS, ...state.data.settings };
-  const wf = yml.replace('__MORNING_CRON__', cronFor(s.morningAt, s.tz)).replace('__EVENING_CRON__', cronFor(s.eveningAt, s.tz));
+  const wf = yml.replace('__MORNING_CRON__', cronFor(s.morningAt, s.tz)).replace('__EVENING_CRON__', cronFor(s.eveningAt, s.tz)).replace('__APP_URL__', new URL('./', location.href).href);
   await g.putText('scripts/package.json', '{\n  "private": true,\n  "type": "module"\n}\n', '安装/更新提醒脚本');
   await g.putText('scripts/core.js', core, '安装/更新提醒脚本');
   await g.putText('scripts/remind.mjs', remind, '安装/更新提醒脚本');

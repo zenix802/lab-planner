@@ -13,17 +13,30 @@ export function unb64u(s) {
   return out;
 }
 
-export const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+export const isIOS = () => !/Android/i.test(navigator.userAgent) && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
 export const isStandalone = () => window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
 
 export function pushEnv() {
   const sw = 'serviceWorker' in navigator;
   const push = sw && 'PushManager' in window && 'Notification' in window;
-  return { sw, push, ios: isIOS(), standalone: isStandalone(), permission: 'Notification' in window ? Notification.permission : 'unsupported' };
+  const ua = navigator.userAgent;
+  return {
+    sw,
+    push,
+    ios: isIOS(),
+    android: /Android/i.test(ua),
+    windows: /Windows/i.test(ua),
+    edge: /Edg(A|iOS)?\//.test(ua),
+    // 微信 / QQ / 钉钉 / 飞书 / 企业微信里直接打开的页面：没有持久的 Service Worker，收不到通知
+    inApp: /MicroMessenger|wxwork|QQ\/|DingTalk|Lark|Feishu/i.test(ua),
+    standalone: isStandalone(),
+    permission: 'Notification' in window ? Notification.permission : 'unsupported',
+  };
 }
 
 export function guessDevice() {
   const ua = navigator.userAgent;
+  if (/Android/.test(ua)) return 'Android';
   if (/iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'iPad';
   if (/iPhone/.test(ua)) return 'iPhone';
   if (/Macintosh/.test(ua)) return 'Mac';
@@ -55,7 +68,7 @@ function sameKey(a, b) {
 export async function subscribePush(reg, vapidPublic) {
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') {
-    throw new Error(perm === 'denied' ? '通知权限被关闭了：请到「设置 → 通知 → 实验日程」里允许通知，再回来点一次' : '没有获得通知权限，请再点一次并选择“允许”');
+    throw new Error(perm === 'denied' ? '通知权限被关闭了：请在系统设置（或浏览器的网站设置）里允许「实验日程」发通知，再回来点一次' : '没有获得通知权限，请再点一次并选择“允许”');
   }
   const key = unb64u(vapidPublic);
   let sub = await reg.pushManager.getSubscription();

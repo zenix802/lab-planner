@@ -1,6 +1,6 @@
 // 实验日程 · Service Worker：离线缓存 + 接收推送
 // 发布新版本时把 VERSION 改一下，用户下次打开会提示“有新版本”。
-const VERSION = '1.0.1';
+const VERSION = '1.1.0';
 const CACHE = 'lab-planner-' + VERSION;
 const ASSETS = [
   './',

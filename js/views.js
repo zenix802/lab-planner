@@ -107,6 +107,13 @@ const toItem = (i, td) => ({ ...i, key: i.task ? i.task.id : 'start:' + i.batch.
 
 function installBanner() {
   const env = pushEnv();
+  if (env.inApp) {
+    return html`<button class="card hint" data-act="install-guide">
+    <span class="card-ic">${icon('share')}</span>
+    <span class="grow"><span class="t1">请在浏览器里打开</span><span class="t2">微信 / QQ 里打开的页面收不到提醒：点右上角「···」→「在浏览器打开」</span></span>
+    ${icon('chevR', 'chev')}
+  </button>`;
+  }
   if (!env.ios || env.standalone) return '';
   return html`<button class="card hint" data-act="install-guide">
     <span class="card-ic">${icon('share')}</span>
@@ -401,12 +408,18 @@ export function viewBatch(id) {
 
 export function pushStatus() {
   const env = pushEnv();
-  if (!env.sw) return ['不支持', '这个浏览器不支持推送'];
+  const mailTip = '可以改用下面的「邮件提醒」';
+  if (env.inApp) return ['请用浏览器打开', '微信 / QQ 里打开的页面收不到通知：点右上角「···」→「在浏览器打开」'];
+  if (!env.sw) return ['不支持', `这个浏览器不支持推送，${mailTip}`];
   if (env.ios && !env.standalone) return ['先添加到主屏幕', 'iPhone/iPad 只有从主屏幕打开的网页应用才能收通知'];
-  if (!env.push) return ['不支持', '请用 iOS 16.4+ 的主屏幕应用，或 Mac 上的 Safari'];
+  if (!env.push) return ['不支持', env.android ? `请用 Chrome 或 Edge 打开，或${mailTip.slice(2)}` : `这个浏览器不支持推送，${mailTip}`];
   if (!isConnected()) return ['先连接 GitHub', '提醒由你仓库里的 GitHub 定时任务发送'];
-  if (env.permission === 'denied') return ['已被系统关闭', '到系统设置 → 通知 里允许「实验日程」'];
-  if (state.cfg.push && !ui.pushLost && env.permission === 'granted') return ['已开启', `${state.cfg.deviceName || '本机'}会在每天早晚收到提醒`];
+  if (env.permission === 'denied') return ['已被系统关闭', '在系统设置（或浏览器的网站设置）里允许「实验日程」发通知'];
+  if (state.cfg.push && !ui.pushLost && env.permission === 'granted') {
+    return ['已开启', env.android ? '到点没收到的话，说明本机连不上推送服务，请填写邮件提醒' : `${state.cfg.deviceName || '本机'}会在每天早晚收到提醒`];
+  }
+  if (env.android) return ['点此开启', `安卓在国内网络下常收不到网页推送，建议同时填写邮件提醒`];
+  if (env.windows && !env.edge) return ['点此开启', '国内网络下 Chrome 收不到推送，请改用 Edge 打开本应用'];
   return ['点此开启', '允许通知后，本机就会收到推送'];
 }
 
@@ -446,6 +459,7 @@ export function viewSettings() {
       html`<div class="field"><span class="field-label">晚间：明日预告</span><span class="field-ctl">${timeCtl('eveningAt', s.eveningAt)}${setToggle('evening', s.evening)}</span></div>`,
       navRow({ act: 'test-push', ic: 'bell', title: '发送测试通知' }),
       navRow({ act: 'devices', ic: 'phone', title: '已登记的设备', sub: '哪些设备会收到推送' }),
+      html`<label class="field"><span class="field-label">邮件提醒<small>收不到推送时用，多个邮箱用逗号隔开</small></span><span class="field-ctl"><input type="email" multiple data-set="email" value="${s.email || ''}" placeholder="填写收件邮箱" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false"></span></label>`,
       html`<div class="field"><span class="field-label">同时建 GitHub Issue<small>装了 GitHub App 也会收到</small></span><span class="field-ctl">${setToggle('issue', s.issue)}</span></div>`,
     ])}
     <p class="foot-note">北京时间，由数据仓库里的 GitHub 定时任务发送；GitHub 高峰期可能晚几分钟到半小时。没有事项的时段不打扰。</p>
@@ -461,7 +475,7 @@ export function viewSettings() {
     ])}
     ${section('本机', [
       html`<label class="field"><span class="field-label">设备名称</span><span class="field-ctl"><input data-cfg="deviceName" value="${state.cfg.deviceName || ''}" placeholder="如 我的 iPhone"></span></label>`,
-      navRow({ act: 'install-guide', ic: 'phone', title: '安装到主屏幕 / 程序坞' }),
+      navRow({ act: 'install-guide', ic: 'phone', title: '安装到主屏幕 / 桌面', sub: 'iPhone、安卓、Mac、Windows 的安装方法' }),
       html`<div class="field"><span class="field-label">版本</span><span class="field-ctl muted">v${APP_VERSION}</span></div>`,
     ])}
     <input type="file" id="import-file" accept=".json,application/json" hidden>`;

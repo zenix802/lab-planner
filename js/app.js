@@ -1,5 +1,5 @@
 // 入口：路由、渲染、事件分发、Service Worker
-import { TYPES, addDays, buildIndex, dueItems, fmtMD, nextDue, relText, isDate } from './core.js';
+import { TYPES, addDays, buildIndex, dueItems, fmtMD, nextDue, relText, isDate, parseEmails } from './core.js';
 import { state, actions, subscribe, today, index, find, isConnected, syncNow, scheduleSync, saveCfg, registerDevice } from './store.js';
 import { ui, icon, morph, closeSheet, closeAllSheets, refreshSheet, topSheet, actionSheet, confirmDialog, toast, runToastAction, setPath, getPath, readInput } from './ui.js';
 import { viewToday, viewCalendar, viewBatches, viewBatch, viewSettings, ruleText, shiftMonth, pushStatus } from './views.js';
@@ -440,6 +440,14 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.id === 'import-file') return F.importFile(el);
+  if (el.matches('[data-set="email"]')) {
+    const raw = el.value.trim();
+    const list = parseEmails(raw);
+    if (raw && list.length === 0) return toast('邮箱格式不对，请检查一下');
+    actions.updateSettings({ email: list.join(', ') });
+    toast(list.length ? `已保存：每天早晚也会发邮件到 ${list.join('、')}` : '已关闭邮件提醒', { ms: 4000 });
+    return;
+  }
   if (el.matches('[data-set]')) {
     const v = el.type === 'checkbox' ? el.checked : el.value;
     if (el.type === 'time' && !/^\d{2}:\d{2}$/.test(v)) return;
@@ -520,11 +528,20 @@ async function initSW() {
 
 // ───────────── 启动 ─────────────
 
+// 邀请链接：#/connect?owner=…&repo=…，只预填用户名和仓库；Token 永远不放进链接
+const invite = /^#\/connect\?(.*)$/.exec(location.hash);
+if (invite) history.replaceState(null, '', '#/settings');
 ui.route = parseHash();
 if (ui.route.name !== 'batch') ui.lastTab = ui.route.name;
 render();
 initSW();
 if (isConnected()) syncNow();
+if (invite) {
+  const q = new URLSearchParams(invite[1]);
+  const clean = (v) => (/^[A-Za-z0-9._-]{1,100}$/.test(v || '') ? v : '');
+  if (isConnected()) toast(`这台设备已经连接了 ${state.cfg.owner}/${state.cfg.repo}`, { ms: 5000 });
+  else F.openGithub({ owner: clean(q.get('owner')), repo: clean(q.get('repo')) });
+}
 
 let lastDay = today();
 setInterval(() => {

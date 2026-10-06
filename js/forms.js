@@ -426,8 +426,13 @@ export function openAway() {
 
 // ═════════════ GitHub 连接 ═════════════
 
-export function openGithub() {
-  openSheet({ kind: 'form', state: { owner: state.cfg.owner || '', repo: state.cfg.repo || 'lab-planner-data', token: '', busy: false, msg: '', err: '' }, render: renderGithub });
+export function openGithub(invite = {}) {
+  const invited = !!(invite.owner && invite.repo);
+  openSheet({
+    kind: 'form',
+    state: { owner: invite.owner || state.cfg.owner || '', repo: invite.repo || state.cfg.repo || 'lab-planner-data', token: '', invited, busy: false, msg: '', err: '' },
+    render: renderGithub,
+  });
 }
 function renderGithub(st) {
   if (isConnected()) {
@@ -450,13 +455,16 @@ function renderGithub(st) {
   }
   return html`${sheetHead('连接 GitHub', { right: st.busy ? '' : '连接', rightAct: 'gh-connect' })}
   <div class="sheet-body">
-    <ol class="steps">
+    ${st.invited ? html`<ol class="steps">
+      <li><b>数据仓库已经建好</b>，用户名和仓库名已自动填好，不用改。</li>
+      <li><b>粘贴 Token</b>：把单独发给你的那串 <code>github_pat_…</code> 粘贴到下面，点「连接并初始化」。Token 只保存在这台设备上，请不要转发给别人。</li>
+    </ol>` : html`<ol class="steps">
       <li><b>新建一个私有仓库</b>用来放数据：名字填 <code>lab-planner-data</code>，选 <b>Private</b>，勾选 “Add a README file”。
         <a class="inline-link" href="https://github.com/new?name=lab-planner-data&visibility=private" target="_blank" rel="noopener">打开 GitHub 新建仓库 ${icon('external')}</a></li>
       <li><b>生成 Token</b>（Fine-grained）：Repository access 选 <b>Only select repositories</b> → 这个仓库；Permissions 里把 <b>Contents、Workflows、Actions</b> 都设为 <b>Read and write</b>。有效期选最长。
         <a class="inline-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">打开 Token 页面 ${icon('external')}</a></li>
       <li><b>粘贴到下面</b>。Token 只保存在这台设备上；每台设备各粘贴一次（可以用同一个）。</li>
-    </ol>
+    </ol>`}
     <div class="list form">
       ${field('GitHub 用户名', html`<input data-bind="owner" value="${st.owner}" placeholder="如 zenix802" autocapitalize="off" autocorrect="off" spellcheck="false">`, { tag: 'label' })}
       ${field('数据仓库', html`<input data-bind="repo" value="${st.repo}" autocapitalize="off" autocorrect="off" spellcheck="false">`, { tag: 'label' })}
@@ -538,7 +546,8 @@ export async function enablePush(swReg, rerender) {
   const env = pushEnv();
   if (env.ios && !env.standalone) return openInstallGuide();
   if (env.sw && !swReg) return toast('应用还在初始化，请过两秒再点一次');
-  if (!env.push) return toast('这个浏览器不支持推送：请用 iPhone/iPad 主屏幕上的应用，或 Mac 上的 Safari', { ms: 5000 });
+  if (env.inApp) return openInstallGuide();
+  if (!env.push) return toast('这个浏览器不支持推送：可以在「设置 → 每天提醒」里填写邮件地址，改用邮件提醒', { ms: 6000 });
   if (!isConnected()) {
     toast('先连接 GitHub：提醒由你仓库里的定时任务发送');
     return openGithub();
@@ -561,8 +570,16 @@ export async function enablePush(swReg, rerender) {
     toast('本机提醒已开启 ✓');
     swReg.showNotification('✅ 提醒已开启', { body: '每天早晚会在这里提醒你今天和明天的实验安排。', tag: 'enabled', icon: 'icons/icon-192.png' }).catch(() => {});
   } catch (e) {
-    toast(e.status ? errText(e) : e.message || String(e), { ms: 6000 });
+    toast(e.status ? errText(e) : pushErrText(e), { ms: 8000 });
   }
+}
+/** subscribe() 失败多半是连不上浏览器的推送服务（安卓 Chrome 依赖 Google 服务，国内网络通常连不上） */
+function pushErrText(e) {
+  const m = (e && e.message) || String(e);
+  if ((e && e.name === 'AbortError') || /push service|Registration failed|gcm|fcm/i.test(m)) {
+    return '这台设备连不上浏览器的推送服务（安卓 Chrome 依赖 Google 服务，国内网络通常连不上）。请在「设置 → 每天提醒」里填写邮件地址，改用邮件提醒。';
+  }
+  return m;
 }
 
 export function openTestPush(swReg) {
@@ -573,7 +590,7 @@ export function openTestPush(swReg) {
       <div class="sheet-body">
         <div class="list">
           ${navRow({ act: 'tp-local', ic: 'phone', title: '本机测试（立刻）', sub: '确认这台设备能弹出通知', chevron: false })}
-          ${navRow({ act: 'tp-remote', ic: 'cloud', title: '完整测试（经 GitHub，约 1 分钟）', sub: '真正走一遍：GitHub 定时任务 → Apple 推送 → 所有已登记设备', chevron: false })}
+          ${navRow({ act: 'tp-remote', ic: 'cloud', title: '完整测试（经 GitHub，约 1 分钟）', sub: '真正走一遍：GitHub 定时任务 → 所有已登记设备，以及填写的提醒邮箱', chevron: false })}
         </div>
         ${st.status ? html`<p class="foot-note strong">${st.status}</p>` : ''}
         ${st.runs && st.runs.length ? html`<div class="sec-title"><span>最近的提醒任务</span></div><div class="list">${st.runs.map((r) => html`<a class="row nav" href="${r.html_url}" target="_blank" rel="noopener"><span class="grow"><span class="t1">${runLabel(r)}</span><span class="t2">${new Date(r.created_at).toLocaleString('zh-CN', { hour12: false })} · ${r.event === 'schedule' ? '定时' : '手动'}</span></span>${icon('external', 'chev')}</a>`)}</div>` : ''}
@@ -624,7 +641,7 @@ export async function testRemoteRun() {
       await loadRuns(sheet);
       const r = st.runs && st.runs[0];
       if (r && r.status === 'completed' && Date.now() - new Date(r.created_at).getTime() < 5 * 60000) {
-        st.status = r.conclusion === 'success' ? '✓ 任务运行成功，通知应该已经到了。' : '✗ 任务失败了：点下面的记录查看原因（常见：还没有设备开启推送）。';
+        st.status = r.conclusion === 'success' ? '✓ 任务运行成功，通知应该已经到了。' : '✗ 任务失败了：点下面的记录查看原因（常见：还没有设备开启推送，或仓库还没配置发件邮箱）。';
         return refreshSheet(sheet);
       }
     }
@@ -669,9 +686,24 @@ export async function devRemove(id) {
 export function openInstallGuide() {
   openSheet({
     kind: 'form',
-    render: () => html`${sheetHead('安装到主屏幕', { left: '完成' })}
-    <div class="sheet-body guide">
-      <h3>${icon('phone')} iPhone / iPad</h3>
+    render: () => {
+      const env = pushEnv();
+      const android = html`<h3>${icon('phone')} 安卓手机</h3>
+      <ol>
+        <li>用 <b>Chrome</b> 或 <b>Edge</b> 浏览器打开本页面。在微信 / QQ 里收到的链接，先点右上角「···」→「在浏览器打开」。</li>
+        <li>点右上角 <b>⋮</b> → <b>添加到主屏幕</b>（或「安装应用」），之后从桌面图标打开。</li>
+        <li>进「设置 → GitHub 同步」粘贴 Token。</li>
+        <li><b>在「设置 → 每天提醒」里填写邮件提醒地址</b>。也可以试试开启「本机通知」，但国内网络下多半收不到。</li>
+      </ol>
+      <p class="foot-note">华为、小米、OPPO、vivo 等手机自带的浏览器，以及夸克、UC，对网页应用支持不完整，建议用 Chrome 或 Edge。</p>`;
+      const windows = html`<h3>${icon('calendar')} Windows 电脑</h3>
+      <ol>
+        <li>用 <b>Edge</b> 浏览器（Windows 10/11 自带）打开本页面。</li>
+        <li>点地址栏右侧的 <b>安装</b> 图标，或右上角 <b>···</b> → <b>应用</b> → <b>将此站点作为应用安装</b>，之后从开始菜单或任务栏打开。</li>
+        <li>进「设置」粘贴 Token，再点「本机通知」允许通知。</li>
+      </ol>
+      <p class="foot-note">请用 Edge：它走微软的推送通道，国内能收到；Chrome 的推送依赖 Google 服务，在国内收不到。收不到时检查 Windows 设置 → 系统 → 通知，以及「专注助手 / 勿扰」。</p>`;
+      const apple = html`<h3>${icon('phone')} iPhone / iPad</h3>
       <ol>
         <li>用 <b>Safari</b> 打开本页面。</li>
         <li>点底部（iPad 在右上）的 <b>分享</b> 按钮 ${icon('share')}，选 <b>添加到主屏幕</b>，打开“作为网页 App 打开”。</li>
@@ -683,10 +715,16 @@ export function openInstallGuide() {
         <li>用 <b>Safari</b> 打开本页面，菜单栏 <b>文件 → 添加到程序坞</b>（macOS Sonoma 14 及以上）。</li>
         <li>从程序坞打开，同样粘贴 Token、开启通知。</li>
       </ol>
-      <p class="foot-note">Mac 上请用 Safari：Chrome 的推送依赖 Google 服务，在国内网络下通常收不到。</p>
+      <p class="foot-note">Mac 上请用 Safari：Chrome 的推送依赖 Google 服务，在国内网络下通常收不到。</p>`;
+      const order = env.android ? [android, windows, apple] : env.windows ? [windows, android, apple] : [apple, android, windows];
+      return html`${sheetHead('安装到主屏幕 / 桌面', { left: '完成' })}
+    <div class="sheet-body guide">
+      ${env.inApp ? html`<div class="card hint warn static"><span class="card-ic">${icon('alert')}</span><span class="grow"><span class="t1">现在是在微信 / QQ 里打开的</span><span class="t2">这里收不到提醒，也不能安装：点右上角「···」→「在浏览器打开」</span></span></div>` : ''}
+      ${order}
       <h3>${icon('cloud')} 多台设备</h3>
-      <p>每台设备各自粘贴一次 Token、各自开启通知。数据通过你的 GitHub 私有仓库自动同步，提醒会同时推到所有开启了通知的设备。</p>
-    </div>`,
+      <p>每台设备各自粘贴一次 Token、各自开启通知。数据通过 GitHub 私有仓库自动同步，提醒会同时推到所有开启了通知的设备；填写了邮件提醒的话，每次也会发一封邮件。</p>
+    </div>`;
+    },
   });
 }
 
